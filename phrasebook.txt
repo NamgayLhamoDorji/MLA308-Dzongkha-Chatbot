@@ -1,0 +1,7 @@
+# Hand-checked translations. One pair per line:  English sentence | Dzongkha sentence
+# Lines starting with # are ignored. Save the file and it is used at once (no restart).
+# These win over Google and NLLB, in BOTH directions. Ask a Dzongkha speaker to fill and correct this.
+# Replace the Dzongkha part of each example below with the correct wording.
+Hello! How can I help you? | ཀུ་ཟུ་བཟང་པོ། ངས་ཁྱོད་ལ་ག་དེ་སྦེ་རོགས་རམ་འབད་ཚུགས་ནི་ཨིན་ན།
+Summarize the document. | ཡིག་ཆ་འདི་བསྡུས་གནང་།
+Thank you. | ཀདྷིན་ཆེ།
