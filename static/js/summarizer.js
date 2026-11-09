@@ -188,7 +188,7 @@
       thread.textContent = ''; thread.hidden = !items.length;
       for (const m of items) {
         const n = el('div', 'msg ' + m.role + (m.status === 'error' ? ' error' : '')); const body = el('div', 'body');
-        if (m.role === 'assistant') { const a = el('div', 'av', 'ཇ'); a.setAttribute('aria-hidden', 'true'); n.append(a); }
+        if (m.role === 'assistant') { const a = el('div', 'av', 'DA'); a.setAttribute('aria-hidden', 'true'); n.append(a); }
         if (m.status === 'pending') { const p = el('div', 'pending'), dd = el('span', 'dots'); dd.append(el('i'), el('i'), el('i')); p.append(dd, el('span', null, (m.progress || 'Thinking') + '...')); body.append(p); }
         else {
           body.append(el('div', 'text' + (m.role === 'assistant' && DZ.TIB.test(m.text) ? ' dz' : ''), m.text));

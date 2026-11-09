@@ -67,6 +67,15 @@ def init_db():
 
 
 # ------------------------------------------------------------------ engine
+def _logged(name, fn):
+    """Print which engine produced each Dzongkha sentence, so changes in quality can be explained."""
+    def run(text):
+        out = fn(text)
+        print(f"[translate] en->dz by {name}: {len(text.split())} words")
+        return out
+    return run
+
+
 def build_engine():
     if os.environ.get("DZO_FAKE"):   # used by the automatic tests, no internet or Ollama needed
         tr = Translator(lambda t: "A translated sentence.", lambda t: "བཀྲ་ཤིས་བདེ་ལེགས།",
@@ -76,13 +85,21 @@ def build_engine():
     # English -> Dzongkha local model. Default: kinley (NLLB fine-tuned on Dzongkha-English pairs).
     # To try Meta's larger model: set DZO_EN2DZ_MODEL=facebook/nllb-200-distilled-1.3B
     kinley = os.environ.get("DZO_EN2DZ_MODEL", "kinleyrabgay/nllb-200-600M-dzo-eng-300k")
-    # English -> Dzongkha, chosen per sentence by length (chat, documents and summaries alike).
-    # Short (<= DZO_SHORT_WORDS words): kinley first, Google as fallback.
-    # Longer: Google first, kinley as fallback.
+    # English -> Dzongkha. DZO_EN2DZ chooses the engine:
+    #   mix (default): by sentence length, with the other engine as a fallback (quality can change when Google fails)
+    #   kinley: always the local kinley model (same output every time, no internet needed)
+    #   google: always Google, kinley only if Google fails
     limit = int(os.environ.get("DZO_SHORT_WORDS", "12"))
-    kinley_first = with_fallback(nllb_backend("en", "dz", kinley), google_backend("en", "dz"), cooldown=60)
-    google_first = with_fallback(google_backend("en", "dz"), nllb_backend("en", "dz", kinley))
-    en_to_dz = by_length(kinley_first, google_first, limit)
+    k_fn = _logged("kinley (local)", nllb_backend("en", "dz", kinley))
+    g_fn = _logged("google", google_backend("en", "dz"))
+    mode = os.environ.get("DZO_EN2DZ", "mix").lower()
+    if mode == "kinley":
+        en_to_dz = k_fn
+    elif mode == "google":
+        en_to_dz = with_fallback(g_fn, k_fn, cooldown=60)
+    else:
+        en_to_dz = by_length(with_fallback(k_fn, g_fn, cooldown=60), with_fallback(g_fn, k_fn), limit)
+    print(f"[translate] English to Dzongkha mode: {mode}")
     en_to_dz_chat = en_to_dz
     # Dzongkha -> English: Google first, local NLLB as fallback.
     tr = Translator(with_fallback(google_backend("dz", "en"), nllb_backend("dz", "en")), en_to_dz,

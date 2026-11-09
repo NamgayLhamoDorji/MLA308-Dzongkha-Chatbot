@@ -9,7 +9,7 @@ from text_utils import is_dzongkha, normalize, split_sentences
 
 # Settings that change the translation output. They are part of the cache key, so changing
 # a model, the beams or the word cutoff never shows old cached translations.
-_SIG_VARS = ("DZO_NLLB_MODEL", "DZO_EN2DZ_MODEL", "DZO_BEAMS", "DZO_SHORT_WORDS")
+_SIG_VARS = ("DZO_NLLB_MODEL", "DZO_EN2DZ_MODEL", "DZO_EN2DZ", "DZO_BEAMS", "DZO_SHORT_WORDS")
 
 
 def _key(s):

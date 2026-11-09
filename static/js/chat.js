@@ -49,7 +49,7 @@
       page.append(convs, main);
 
       /* ----- welcome and suggested prompts ----- */
-      const mk = el('div', 'mark', 'ཇ'); mk.setAttribute('aria-hidden', 'true');
+      const mk = el('div', 'mark', 'DA'); mk.setAttribute('aria-hidden', 'true');
       welcome.append(mk, el('h2', null, 'How can I help today?'), el('p', null, 'Write in Dzongkha or English. Every answer comes back in Dzongkha.'));
       const starters = el('div', 'starters');
       const st = (ic, t, d, fn) => { const b = el('button', 'starter'); b.type = 'button'; const i = el('div', 's-ic'); i.append(icon(ic)); const x = el('div'); x.append(el('b', null, t), el('span', null, d)); b.append(i, x); b.onclick = fn; return b; };
@@ -95,7 +95,7 @@
       /* ----- messages ----- */
       function fillMsg(node, m) {
         node.className = 'msg ' + m.role + (m.status === 'error' ? ' error' : ''); node.textContent = '';
-        if (m.role === 'assistant') { const a = el('div', 'av', 'ཇ'); a.setAttribute('aria-hidden', 'true'); node.append(a); }
+        if (m.role === 'assistant') { const a = el('div', 'av', 'DA'); a.setAttribute('aria-hidden', 'true'); node.append(a); }
         const body = el('div', 'body');
         if (m.status === 'pending') {
           const p = el('div', 'pending'), d = el('span', 'dots'); d.append(el('i'), el('i'), el('i'));
