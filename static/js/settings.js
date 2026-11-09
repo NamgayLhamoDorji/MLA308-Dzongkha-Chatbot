@@ -18,7 +18,7 @@
       const look = el('section', 'card set-card'); look.append(el('h3', null, 'Appearance'));
       look.append(row('Theme', 'Light, dark, or follow your device.', seg([['system', 'Device'], ['light', 'Light'], ['dark', 'Dark']], pref('theme'), (v) => { setPref('theme', v); applyTheme(); }, 'Theme')));
       const range = el('input'); range.type = 'range'; range.min = 0.9; range.max = 1.8; range.step = 0.05; range.value = pref('zoom'); range.setAttribute('aria-label', 'Dzongkha text size'); range.style.width = '180px';
-      const prev = el('div', 'preview'); const pv = el('p', 'dz', 'ཀུན་ལ་བཀྲ་ཤིས་བདེ་ལེགས།'); prev.append(pv);
+      const prev = el('div', 'preview'); const pv = el('p', 'dz', 'སྐུ་གཟུགས་བཟང་པོ།'); prev.append(pv);
       range.oninput = () => { setPref('zoom', range.value); applyZoom(); };
       look.append(row('Dzongkha text size', 'Changes the size of answers and summaries.', range), prev);
 

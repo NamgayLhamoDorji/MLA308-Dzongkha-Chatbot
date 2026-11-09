@@ -53,7 +53,7 @@
       const page = el('div', 'page'); root.append(page);
       const hero = el('section', 'hero');
       const left = el('div');
-      left.append(el('p', 'greet', 'ཀུན་ལ་བཀྲ་ཤིས་བདེ་ལེགས།'), el('h2', null, 'Welcome to Dzongkha AI'),
+      left.append(el('p', 'greet', 'སྐུ་གཟུགས་བཟང་པོ།'), el('h2', null, 'Welcome to Dzongkha AI'),
         el('p', null, 'Your intelligent assistant for Dzongkha communication and document understanding.'));
       hero.append(left, dzongSvg()); page.append(hero);
 
