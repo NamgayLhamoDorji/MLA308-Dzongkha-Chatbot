@@ -3,6 +3,7 @@ Run:  python server.py   then open http://127.0.0.1:8000"""
 import hashlib
 import hmac
 import io
+import mimetypes
 import os
 import re
 import secrets
@@ -14,6 +15,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import llm
@@ -33,6 +35,7 @@ CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, username TEXT UNIQUE N
 CREATE TABLE IF NOT EXISTS sessions (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, created REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS chats (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, title TEXT NOT NULL DEFAULT 'New chat', created REAL NOT NULL, updated REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY, chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE, role TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', en TEXT, status TEXT NOT NULL DEFAULT 'done', progress TEXT NOT NULL DEFAULT '', created REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS saved (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, message_id INTEGER NOT NULL, doc_id INTEGER NOT NULL DEFAULT 0, doc_name TEXT NOT NULL DEFAULT '', fmt TEXT NOT NULL DEFAULT '', text TEXT NOT NULL DEFAULT '', en TEXT NOT NULL DEFAULT '', created REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS docs (id INTEGER PRIMARY KEY, chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE, name TEXT NOT NULL, pages INTEGER NOT NULL DEFAULT 0, empty_pages INTEGER NOT NULL DEFAULT 0, words INTEGER NOT NULL DEFAULT 0, raw_text TEXT NOT NULL DEFAULT '', en_text TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'queued', progress TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', created REAL NOT NULL);
 """
 
@@ -54,6 +57,11 @@ def init_db():
     with conn() as c:
         c.execute("PRAGMA journal_mode=WAL")
         c.executescript(SCHEMA)
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(messages)")}   # added for the new interface
+        if "fmt" not in cols:
+            c.execute("ALTER TABLE messages ADD COLUMN fmt TEXT NOT NULL DEFAULT ''")
+        if "doc_id" not in cols:
+            c.execute("ALTER TABLE messages ADD COLUMN doc_id INTEGER NOT NULL DEFAULT 0")
         c.execute("UPDATE messages SET status='error', text='The server restarted before this finished. Please ask again.' WHERE status='pending'")
         c.execute("UPDATE docs SET status='error', error='Interrupted by a restart. Please attach the file again.' WHERE status IN ('queued','processing')")
 
@@ -127,9 +135,20 @@ class MessageIn(BaseModel):
     text: str = ""
     action: str = "chat"
     paragraphs: int = 0
+    format: str = ""      # summaries only: brief | detailed | bullets | points
+    doc_id: int = 0       # summaries and questions about one particular file of the chat
 
+
+FORMATS = {"brief": "Give a brief summary of the document.",
+           "detailed": "Give a detailed summary of the document.",
+           "bullets": "Summarize the document as bullet points.",
+           "points": "List the key points of the document."}
 
 app = FastAPI()
+mimetypes.add_type("text/css", ".css")          # Windows can report wrong types for these
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("font/woff2", ".woff2")
+app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
 
 @app.get("/")
@@ -192,7 +211,7 @@ def own_chat(c, chat_id, user_id):
 @app.get("/api/chats")
 def list_chats(user=Depends(current_user)):
     with conn() as c:
-        rows = c.execute("SELECT id, title, updated FROM chats WHERE user_id = ? ORDER BY updated DESC", (user["id"],)).fetchall()
+        rows = c.execute("SELECT id, title, updated, (SELECT COUNT(*) FROM docs d WHERE d.chat_id = chats.id) AS docs FROM chats WHERE user_id = ? ORDER BY updated DESC", (user["id"],)).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -208,8 +227,8 @@ def new_chat(user=Depends(current_user)):
 def get_chat(chat_id: int, user=Depends(current_user)):
     with conn() as c:
         chat = own_chat(c, chat_id, user["id"])
-        msgs = c.execute("SELECT id, role, text, en, status, progress FROM messages WHERE chat_id = ? ORDER BY id", (chat_id,)).fetchall()
-        docs = c.execute("SELECT id, name, pages, empty_pages, words, status, progress, error FROM docs WHERE chat_id = ? ORDER BY id", (chat_id,)).fetchall()
+        msgs = c.execute("SELECT id, role, text, en, status, progress, fmt, doc_id, created FROM messages WHERE chat_id = ? ORDER BY id", (chat_id,)).fetchall()
+        docs = c.execute("SELECT id, name, pages, empty_pages, words, status, progress, error, created FROM docs WHERE chat_id = ? ORDER BY id", (chat_id,)).fetchall()
     return {"id": chat["id"], "title": chat["title"], "messages": [dict(m) for m in msgs], "docs": [dict(d) for d in docs]}
 
 
@@ -287,6 +306,7 @@ async def upload(chat_id: int, file: UploadFile = File(...), user=Depends(curren
         did = c.execute("INSERT INTO docs(chat_id, name, pages, empty_pages, words, raw_text, created) VALUES (?,?,?,?,?,?,?)",
                         (chat_id, name, pages, empty, words, raw, now)).lastrowid
         c.execute("UPDATE chats SET updated = ? WHERE id = ?", (now, chat_id))
+        c.execute("UPDATE chats SET title = ? WHERE id = ? AND title = 'New chat'", (name[:48], chat_id))
     POOL.submit(process_doc, did)
     return {"id": did}
 
@@ -328,6 +348,99 @@ def doc_index(doc_id, en_text):
     return DOC_CACHE[doc_id]
 
 
+# ------------------------------------------------------------------ library, saved summaries (used by the new pages)
+def owned_doc(c, doc_id, user_id):
+    r = c.execute("SELECT d.* FROM docs d JOIN chats c ON c.id = d.chat_id WHERE d.id = ? AND c.user_id = ?", (doc_id, user_id)).fetchone()
+    if not r:
+        raise HTTPException(404, "Document not found.")
+    return r
+
+
+@app.get("/api/docs")
+def list_docs(user=Depends(current_user)):
+    with conn() as c:
+        rows = c.execute(
+            "SELECT d.id, d.chat_id, d.name, d.pages, d.empty_pages, d.words, d.status, d.progress, d.error, d.created, "
+            "(SELECT COUNT(*) FROM messages m WHERE m.doc_id = d.id AND m.role = 'assistant' AND m.status = 'done' AND m.fmt != '') AS summaries, "
+            "(SELECT MAX(m.created) FROM messages m WHERE m.doc_id = d.id AND m.role = 'assistant' AND m.status = 'done' AND m.fmt != '') AS last_summary "
+            "FROM docs d JOIN chats c ON c.id = d.chat_id WHERE c.user_id = ? ORDER BY d.id DESC", (user["id"],)).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.get("/api/docs/{doc_id}")
+def get_doc(doc_id: int, user=Depends(current_user)):
+    with conn() as c:
+        d = owned_doc(c, doc_id, user["id"])
+        sums = c.execute("SELECT id, text, en, status, progress, fmt, created FROM messages WHERE doc_id = ? AND role = 'assistant' AND fmt != '' ORDER BY id", (doc_id,)).fetchall()
+    cap = 100_000
+    return {"id": d["id"], "chat_id": d["chat_id"], "name": d["name"], "pages": d["pages"], "empty_pages": d["empty_pages"], "words": d["words"],
+            "status": d["status"], "progress": d["progress"], "error": d["error"], "created": d["created"],
+            "text": d["raw_text"][:cap], "truncated": len(d["raw_text"]) > cap, "summaries": [dict(s) for s in sums]}
+
+
+class SaveIn(BaseModel):
+    message_id: int
+
+
+@app.get("/api/summaries")
+def list_saved(user=Depends(current_user)):
+    with conn() as c:
+        rows = c.execute("SELECT s.id, s.message_id, s.doc_id, s.doc_name, s.fmt, s.text, s.en, s.created, "
+                         "(SELECT chat_id FROM docs d WHERE d.id = s.doc_id) AS chat_id FROM saved s WHERE s.user_id = ? ORDER BY s.id DESC", (user["id"],)).fetchall()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/summaries")
+def save_summary(body: SaveIn, user=Depends(current_user)):
+    with conn() as c:
+        old = c.execute("SELECT id FROM saved WHERE user_id = ? AND message_id = ?", (user["id"], body.message_id)).fetchone()
+        if old:
+            return {"id": old["id"]}
+        m = c.execute("SELECT m.text, m.en, m.fmt, m.doc_id, m.status FROM messages m JOIN chats c ON c.id = m.chat_id "
+                      "WHERE m.id = ? AND c.user_id = ? AND m.role = 'assistant'", (body.message_id, user["id"])).fetchone()
+        if not m or m["status"] != "done" or not m["fmt"]:
+            raise HTTPException(404, "That summary was not found.")
+        d = c.execute("SELECT name FROM docs WHERE id = ?", (m["doc_id"],)).fetchone()
+        sid = c.execute("INSERT INTO saved(user_id, message_id, doc_id, doc_name, fmt, text, en, created) VALUES (?,?,?,?,?,?,?,?)",
+                        (user["id"], body.message_id, m["doc_id"], d["name"] if d else "Document", m["fmt"], m["text"], m["en"] or "", time.time())).lastrowid
+    return {"id": sid}
+
+
+@app.delete("/api/summaries/{sid}")
+def delete_saved(sid: int, user=Depends(current_user)):
+    with conn() as c:
+        if not c.execute("SELECT 1 FROM saved WHERE id = ? AND user_id = ?", (sid, user["id"])).fetchone():
+            raise HTTPException(404, "Summary not found.")
+        c.execute("DELETE FROM saved WHERE id = ?", (sid,))
+    return {"ok": True}
+
+
+@app.post("/api/messages/{msg_id}/regenerate")
+def regenerate(msg_id: int, user=Depends(current_user)):
+    """Answer the same question again, in place (the old answer is replaced)."""
+    with conn() as c:
+        a = c.execute("SELECT m.* FROM messages m JOIN chats c ON c.id = m.chat_id WHERE m.id = ? AND c.user_id = ? AND m.role = 'assistant'", (msg_id, user["id"])).fetchone()
+        if not a or a["status"] == "pending":
+            raise HTTPException(404, "Nothing to regenerate.")
+        q = c.execute("SELECT id, text FROM messages WHERE chat_id = ? AND role = 'user' AND id < ? ORDER BY id DESC LIMIT 1", (a["chat_id"], msg_id)).fetchone()
+        if not q:
+            raise HTTPException(404, "The question for this answer was not found.")
+        c.execute("UPDATE messages SET status = 'pending', progress = 'Waiting', text = '', en = NULL WHERE id = ?", (msg_id,))
+    fmt = a["fmt"] if a["fmt"] in FORMATS else ""
+    POOL.submit(run_message, a["chat_id"], q["id"], msg_id, q["text"], "summarize" if a["fmt"] else "chat", fmt, a["doc_id"])
+    return {"id": msg_id}
+
+
+@app.delete("/api/chats/{chat_id}/messages")
+def clear_chat(chat_id: int, user=Depends(current_user)):
+    """Clear the conversation but keep the attached files."""
+    with conn() as c:
+        own_chat(c, chat_id, user["id"])
+        c.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
+        c.execute("UPDATE chats SET title = COALESCE((SELECT name FROM docs WHERE chat_id = ? ORDER BY id LIMIT 1), 'New chat') WHERE id = ?", (chat_id, chat_id))
+    return {"ok": True}
+
+
 # ------------------------------------------------------------------ messages
 @app.post("/api/chats/{chat_id}/messages")
 def post_message(chat_id: int, body: MessageIn, user=Depends(current_user)):
@@ -338,6 +451,10 @@ def post_message(chat_id: int, body: MessageIn, user=Depends(current_user)):
     if len(text) > 4000:
         raise HTTPException(400, "That message is too long (4000 characters at most).")
     n = max(0, min(6, body.paragraphs))
+    fmt = body.format if body.format in FORMATS else ""
+    if action == "summarize" and fmt and not (n and fmt == "detailed"):
+        text = FORMATS[fmt]
+        n = 0
     if action == "summarize" and n:      # the paragraph selector in the page: no translation involved
         text = "Summarize the document in %d paragraph%s." % (n, "" if n == 1 else "s")
     elif action == "summarize" and not text:
@@ -346,11 +463,12 @@ def post_message(chat_id: int, body: MessageIn, user=Depends(current_user)):
     with conn() as c:
         chat = own_chat(c, chat_id, user["id"])
         uid = c.execute("INSERT INTO messages(chat_id, role, text, status, created) VALUES (?,?,?,?,?)", (chat_id, "user", text, "done", now)).lastrowid
-        aid = c.execute("INSERT INTO messages(chat_id, role, text, status, progress, created) VALUES (?,?,?,?,?,?)", (chat_id, "assistant", "", "pending", "Waiting", now)).lastrowid
+        aid = c.execute("INSERT INTO messages(chat_id, role, text, status, progress, fmt, doc_id, created) VALUES (?,?,?,?,?,?,?,?)",
+                        (chat_id, "assistant", "", "pending", "Waiting", (fmt or "auto") if action == "summarize" else "", body.doc_id if action == "summarize" else 0, now)).lastrowid
         if chat["title"] == "New chat":
             c.execute("UPDATE chats SET title = ? WHERE id = ?", (text[:48], chat_id))
         c.execute("UPDATE chats SET updated = ? WHERE id = ?", (now, chat_id))
-    POOL.submit(run_message, chat_id, uid, aid, text, action)
+    POOL.submit(run_message, chat_id, uid, aid, text, action, fmt, body.doc_id)
     return {"id": aid}
 
 
@@ -372,14 +490,17 @@ def split_pasted_summary(q_en):
     return text, n
 
 
-def run_message(chat_id, user_msg_id, asst_id, text, action):
+def run_message(chat_id, user_msg_id, asst_id, text, action, fmt="", doc_id=0):
     def setp(p):
         with conn() as c:
             c.execute("UPDATE messages SET progress = ? WHERE id = ?", (p, asst_id))
     try:
         setp("Understanding your question")
         with conn() as c:   # only the NEWEST ready file is used, so two documents never get mixed
-            docs = c.execute("SELECT id, name, en_text, created FROM docs WHERE chat_id = ? AND status = 'ready' ORDER BY id DESC LIMIT 1", (chat_id,)).fetchall()
+            if doc_id:   # the interface asked about one particular file
+                docs = c.execute("SELECT id, name, en_text, created FROM docs WHERE chat_id = ? AND status = 'ready' AND id = ?", (chat_id, doc_id)).fetchall()
+            else:
+                docs = c.execute("SELECT id, name, en_text, created FROM docs WHERE chat_id = ? AND status = 'ready' ORDER BY id DESC LIMIT 1", (chat_id,)).fetchall()
         q_en = ENGINE.to_en(text)
         is_sum, n_par, q_en = parse_summary_request(text, q_en, bool(docs))
         since = docs[0]["created"] if docs else 0
@@ -405,7 +526,7 @@ def run_message(chat_id, user_msg_id, asst_id, text, action):
                 en_parts, dz_parts = [], []
                 for d in docs:
                     chunks, _ = doc_index(d["id"], d["en_text"])
-                    s = ENGINE.summarize_chunks(chunks, lambda m, n=d["name"]: setp(f"{n}: {m}"), request=q_en, paragraphs=n_par)
+                    s = ENGINE.summarize_chunks(chunks, lambda m, n=d["name"]: setp(f"{n}: {m}"), request=q_en, paragraphs=n_par, style=fmt)
                     setp("Translating the summary to Dzongkha")
                     s_dz = ENGINE.to_dz(s)   # documents and summaries use the same length-based routing
                     if len(docs) > 1:
@@ -429,8 +550,11 @@ def run_message(chat_id, user_msg_id, asst_id, text, action):
             en = ENGINE.answer(q_en, excerpts, history)
             setp("Translating the answer to Dzongkha")
             dz = ENGINE.to_dz(en, chat=not excerpts)   # plain chat uses the chat route, document answers the default one
+        summary_of = docs[0]["id"] if docs and (action == "summarize" or is_sum) and not pasted else 0
         with conn() as c:
             c.execute("UPDATE messages SET text = ?, en = ?, status = 'done', progress = '' WHERE id = ?", (dz, en, asst_id))
+            if summary_of:   # mark chat-typed summary requests too, so they show up as summaries
+                c.execute("UPDATE messages SET doc_id = ?, fmt = CASE WHEN fmt = '' THEN 'auto' ELSE fmt END WHERE id = ?", (summary_of, asst_id))
             c.execute("UPDATE chats SET updated = ? WHERE id = ?", (time.time(), chat_id))
     except Exception as e:
         with conn() as c:

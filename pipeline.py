@@ -134,12 +134,16 @@ class Engine:
             notes = merged
         return notes
 
-    def summarize_chunks(self, chunks, progress=None, request=None, paragraphs=None):
+    def summarize_chunks(self, chunks, progress=None, request=None, paragraphs=None, style=""):
         """Reads EVERY part of the document. With a paragraph count, each paragraph covers its own
         stretch of the document, so the end is never left out."""
         if not chunks:
             return ""
         words = sum(len(c.split()) for c in chunks)
+        if style == "brief":
+            paragraphs = 1
+        elif style == "detailed" and not paragraphs:
+            paragraphs = max(3, auto_paragraphs(words))
         if not paragraphs:   # nobody asked for a number: choose one from the length of the text
             paragraphs = auto_paragraphs(words)
         if words >= SHORT_TEXT_WORDS:
@@ -165,6 +169,21 @@ class Engine:
                 if progress:
                     progress(f"Reading part {i + 1} of {len(groups)}")
                 notes.append(self.ask("Summarize the key points of this text in 4 to 6 complete sentences:\n\n" + g + PLAIN))
+        if style in ("bullets", "points"):
+            notes = self._condense(notes, 6)
+            if progress:
+                progress("Writing the key points" if style == "points" else "Writing the bullet points")
+            count = "4 to 6" if style == "points" else "6 to 10"
+            what = ("the most important takeaways of the document, most important first"
+                    if style == "points" else "the whole document in order, from its beginning to its end")
+            ans = self.ask("Here are notes about a document, in order from its beginning to its end:\n\n" +
+                           "\n".join("- " + n for n in notes) +
+                           f"\n\nWrite {count} bullet points covering {what}. Each bullet is ONE complete sentence of at most 20 words, "
+                           "with a specific fact, name or number. One bullet per line, starting with '- '. "
+                           "Write only the bullets, with no introduction." + PLAIN)
+            lines = [re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", l.replace("**", "")).strip() for l in ans.splitlines()]
+            lines = [l for l in lines if l and not l.endswith(":")][:10]
+            return "\n".join(lines) if lines else ans.strip()
         if paragraphs and paragraphs > 1 and len(notes) >= paragraphs:
             size, extra = divmod(len(notes), paragraphs)
             paras, i = [], 0
