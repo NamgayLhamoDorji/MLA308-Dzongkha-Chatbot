@@ -45,6 +45,21 @@ SYSTEM = (
     "Distinguish between historical facts and current information. "
     "Do not invent sources or claim that information is verified "
     "unless an actual source has been provided. "
+    "RESPONSE FORMATTING RULES: "
+
+    "When answering general questions, write in natural, connected paragraphs. "
+    "When a user asks about several related topics, explain them together "
+    "in one or two coherent paragraphs. "
+
+    "Never write one fact per line. "
+    "Never present a normal conversational answer as a collection of statements. "
+    "Do not insert line breaks between related sentences. "
+    "Do not use bullet points unless the user requests them "
+    "or the information genuinely requires a list. "
+
+    "Make responses sound like a knowledgeable human conversation. "
+    "Use natural transitions between sentences and ideas. "
+    "Keep the answer engaging, informative, and easy to read. "
 )
 
 def ask(prompt: str, system: str = SYSTEM, history=None, model: str = MODEL) -> str:
