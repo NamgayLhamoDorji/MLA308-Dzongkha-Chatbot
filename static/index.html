@@ -3,406 +3,66 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dzongkha Assistant</title>
-<style>
-/* Layout: sidebar with chat history on the left, one centred conversation column on the right. */
-:root {
-  --bg: #f7f6f3; --panel: #ffffff; --side: #efeee9; --fg: #1d2230; --muted: #6a7183;
-  --line: #e0ded7; --accent: #c9640a; --accent-fg: #ffffff; --accent-soft: #fbe9d6;
-  --reply-bg: #fff6e6; --reply-fg: #2a2016; --reply-line: #f0d9b0; --zoom: 1.15;
-  --danger: #b3261e; --warn: #8a5a00; --shadow: 0 1px 2px rgba(20,24,35,.06), 0 6px 20px rgba(20,24,35,.06);
-  --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  --tib: "Jomolhari", "Noto Sans Tibetan", "Noto Serif Tibetan", "Microsoft Himalaya", "Kailasa", serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14171f; --panel: #1b1f2a; --side: #10131a; --fg: #e8eaf0; --muted: #98a0b3;
-    --line: #2a3040; --accent: #f0a23b; --accent-fg: #1a1206; --accent-soft: #3a2a14;
-    --reply-bg: #252b3a; --reply-fg: #eef0f6; --reply-line: #3a435a;
-    --danger: #f2877f; --warn: #e6b25a; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
-    color-scheme: dark;
-  }
-}
-* { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; }
-body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--sans); }
-button { font: inherit; color: inherit; cursor: pointer; }
-button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-[hidden] { display: none !important; }
-/* Dzongkha text has the same size as English. The A- / A+ buttons at the top change the size of answers. */
-.dz { font-family: "Segoe UI", Arial, "Helvetica Neue", sans-serif, var(--tib); font-size: 1.25em; line-height: 1.85; }   /* between 1em (small) and 1.55em (too big) */
-.msg.user .dz { font-size: 1.15em; }
-
-/* ---------- sign in ---------- */
-#auth { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; }
-.card { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 16px; }
-.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 1.15rem; }
-.logo { width: 34px; height: 34px; border-radius: 9px; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; font-weight: 700; font-size: .95rem; flex: none; }
-.tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--bg); border-radius: 9px; padding: 3px; }
-.tabs button { border: 0; background: none; padding: 7px; border-radius: 7px; color: var(--muted); font-weight: 600; }
-.tabs button[aria-selected="true"] { background: var(--panel); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-label.f { display: flex; flex-direction: column; gap: 5px; font-size: .85rem; color: var(--muted); }
-input[type=text], input[type=password] { font: inherit; padding: 10px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
-.primary { border: 0; background: var(--accent); color: var(--accent-fg); padding: 10px 14px; border-radius: 9px; font-weight: 650; }
-.primary:disabled { opacity: .55; cursor: default; }
-.err { color: var(--danger); font-size: .88rem; min-height: 1.2em; }
-
-/* ---------- app shell ---------- */
-#app { height: 100%; display: grid; grid-template-columns: 280px minmax(0, 1fr); }
-aside { background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; padding: 14px 12px; gap: 12px; }
-.newchat { display: flex; align-items: center; gap: 8px; width: 100%; border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 9px 12px; font-weight: 600; }
-.newchat:hover { border-color: var(--accent); }
-#chatlist { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-.sec { font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 6px 8px 2px; }
-.ci { display: flex; align-items: center; gap: 4px; border-radius: 8px; }
-.ci button.open { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ci:hover, .ci.active { background: var(--panel); }
-.ci.active button.open { font-weight: 600; }
-.ci .del { border: 0; background: none; color: var(--muted); padding: 6px 8px; border-radius: 6px; opacity: 0; }
-.ci:hover .del, .ci .del:focus-visible { opacity: 1; }
-.ci .del:hover { color: var(--danger); }
-.account { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
-.avatar-u { width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 700; flex: none; text-transform: uppercase; }
-.account .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.link { border: 0; background: none; color: var(--muted); padding: 4px 6px; border-radius: 6px; font-size: .85rem; }
-.link:hover { color: var(--fg); background: var(--panel); }
-
-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; position: relative; }
-.top { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); min-height: 52px; background: var(--panel); }
-.top h1 { font-size: 1rem; margin: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.zoom { margin-left: auto; display: flex; gap: 4px; flex: none; }
-.zoom button { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 3px 10px; font-weight: 650; line-height: 1.3; }
-.zoom button:hover { border-color: var(--accent); color: var(--accent); }
-.menu { display: none; border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 6px 10px; }
-#scroll { flex: 1; min-height: 0; overflow-y: auto; }
-#msgs { max-width: 860px; margin: 0 auto; padding: 24px 16px 12px; display: flex; flex-direction: column; gap: 20px; }
-
-/* ---------- chat bubbles ---------- */
-.msg { display: flex; gap: 12px; align-items: flex-start; min-width: 0; }
-.msg.user { justify-content: flex-end; }
-.msg .avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--accent-fg); display: grid; place-items: center; font-weight: 700; font-size: .8rem; flex: none; margin-top: 2px; }
-.msg .body { min-width: 0; max-width: 100%; }
-/* assistant: white bubble on the left */
-.msg.assistant .body { max-width: min(86%, 720px); font-size: calc(1rem * var(--zoom)); background: var(--reply-bg); color: var(--reply-fg); border: 1px solid var(--reply-line); border-radius: 4px 18px 18px 18px; padding: 12px 20px 8px; box-shadow: var(--shadow); }
-/* you: coloured bubble on the right */
-.msg.user .body { max-width: min(80%, 640px); background: var(--accent); color: var(--accent-fg); border-radius: 18px 18px 4px 18px; padding: 10px 16px; }
-.msg.user .note { color: inherit; opacity: .8; }
-.msg .text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.msg.error .body { border-color: var(--danger); }
-.msg.error .text { color: var(--danger); }
-.note { font-size: .78rem; color: var(--muted); margin-top: 4px; }
-.acts { display: flex; gap: 4px; margin-top: 4px; padding-bottom: 2px; }
-.acts button { border: 0; background: none; color: var(--muted); font-size: .8rem; padding: 3px 8px; border-radius: 6px; }
-.acts button:hover { background: var(--side); color: var(--fg); }
-.pending { display: flex; align-items: center; gap: 10px; color: var(--muted); padding: 4px 0 6px; }
-.dots { display: inline-flex; gap: 4px; }
-.dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: bl 1.2s infinite ease-in-out; }
-.dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
-@keyframes bl { 0%, 80%, 100% { opacity: .25; transform: scale(.8); } 40% { opacity: 1; transform: scale(1); } }
-@media (prefers-reduced-motion: reduce) { .dots i { animation: none; opacity: .7; } }
-
-#empty { max-width: 640px; margin: 8vh auto 0; padding: 0 16px; text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
-#empty h2 { margin: 0; font-size: 1.6rem; }
-#empty p { margin: 0; color: var(--muted); max-width: 46ch; }
-.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; width: 100%; margin-top: 8px; }
-.starter { text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; }
-.starter:hover { border-color: var(--accent); }
-.starter b { font-size: .95rem; } .starter span { color: var(--muted); font-size: .85rem; }
-
-/* ---------- composer ---------- */
-.composer-wrap { padding: 8px 16px 16px; }
-.composer { max-width: 860px; margin: 0 auto; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
-.composer:focus-within { border-color: var(--accent); }
-#docs { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 2px 0; }
-.chip { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 5px 6px 5px 10px; max-width: 100%; }
-.chip .fn { font-weight: 600; font-size: .86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 230px; }
-.chip .meta { font-size: .78rem; color: var(--muted); }
-.chip .meta.warn { color: var(--warn); } .chip .meta.bad { color: var(--danger); }
-.chip button { border: 0; background: none; color: var(--muted); padding: 2px 6px; border-radius: 6px; }
-.chip button:hover { color: var(--danger); }
-.row { display: flex; align-items: flex-end; gap: 6px; }
-/* The box is typed in Dzongkha as well, so it uses the Tibetan font too and a larger size. */
-textarea { flex: 1; min-width: 0; resize: none; border: 0; background: none; color: var(--fg); font: inherit; font-family: var(--sans), var(--tib); font-size: 1.1rem; padding: 8px 6px; max-height: 180px; outline: none !important; }
-.icon { border: 0; background: none; color: var(--muted); width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; flex: none; }
-.icon:hover { background: var(--bg); color: var(--fg); }
-.send { background: var(--accent); color: var(--accent-fg); }
-.send:hover { background: var(--accent); color: var(--accent-fg); filter: brightness(1.08); }
-.send:disabled { opacity: .45; cursor: default; }
-.sumbtn { border: 1px solid var(--line); background: none; border-radius: 19px; padding: 0 14px; height: 38px; font-size: .86rem; font-weight: 600; flex: none; }
-.sel { border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 19px; height: 38px; padding: 0 10px; font: inherit; font-size: .84rem; flex: none; }
-.sumbtn:hover { border-color: var(--accent); color: var(--accent); }
-.hint { text-align: center; color: var(--muted); font-size: .76rem; padding-top: 6px; }
-#drop { position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 88%, transparent); border: 2px dashed var(--accent); border-radius: 14px; display: grid; place-items: center; font-weight: 650; font-size: 1.1rem; z-index: 5; margin: 8px; }
-
-#backdrop { display: none; }
-@media (max-width: 760px) {
-  #app { grid-template-columns: minmax(0, 1fr); }
-  aside { position: fixed; z-index: 20; inset: 0 auto 0 0; width: 285px; transform: translateX(-100%); transition: transform .2s; }
-  body.nav aside { transform: none; }
-  body.nav #backdrop { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 10; }
-  .menu { display: block; }
-  .msg.user .body { max-width: 92%; }
-  .msg.assistant .body { max-width: calc(100% - 46px); }
-}
-</style>
+<title>Dzongkha AI</title>
+<meta name="theme-color" content="#6d1b2c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%236d1b2c'/%3E%3Cpath d='M16 5 27 16 16 27 5 16Z' fill='none' stroke='%23d2af62' stroke-width='2'/%3E%3Cpath d='M16 11 21 16 16 21 11 16Z' fill='%23d2af62'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/css/app.css">
+<script>/* apply the saved theme before the page paints, so it never flashes */
+try { var t = localStorage.getItem('dz.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      if (localStorage.getItem('dz.collapsed') === '1') document.body && document.body.classList.add('collapsed'); } catch (e) {}</script>
 </head>
 <body>
 
 <!-- ============ sign in / create account ============ -->
 <section id="auth" hidden>
-  <form class="card" id="authform" autocomplete="on">
-    <div class="brand"><div class="logo">Dz</div>Dzongkha Assistant</div>
-    <div class="tabs" role="tablist">
-      <button type="button" role="tab" id="tab-in" aria-selected="true">Sign in</button>
-      <button type="button" role="tab" id="tab-up" aria-selected="false">Create account</button>
+  <div class="auth-card">
+    <div class="auth-art">
+      <div class="greet dz-greet">ཀུན་ལ་བཀྲ་ཤིས་བདེ་ལེགས།</div>
+      <h2>Dzongkha AI</h2>
+      <p>Your intelligent Dzongkha assistant. Ask questions and summarize documents, with every answer in Dzongkha.</p>
     </div>
-    <label class="f">Username<input type="text" id="u" autocomplete="username" required></label>
-    <label class="f">Password<input type="password" id="p" autocomplete="current-password" required></label>
-    <div class="err" id="autherr" role="alert"></div>
-    <button class="primary" id="authgo" type="submit">Sign in</button>
-  </form>
+    <form class="auth-form" id="authform" autocomplete="on">
+      <div class="seg" role="group" aria-label="Sign in or create account">
+        <button type="button" id="tab-in" aria-pressed="true">Sign in</button>
+        <button type="button" id="tab-up" aria-pressed="false">Create account</button>
+      </div>
+      <label class="field">Username<input class="input" type="text" id="u" autocomplete="username" required></label>
+      <label class="field">Password<input class="input" type="password" id="p" autocomplete="current-password" required></label>
+      <div class="err" id="autherr" role="alert"></div>
+      <button class="btn primary" id="authgo" type="submit">Sign in</button>
+    </form>
+  </div>
 </section>
 
-<!-- ============ chat app ============ -->
+<!-- ============ workspace ============ -->
 <div id="app" hidden>
-  <aside id="side">
-    <div class="brand"><div class="logo">Dz</div>Dzongkha Assistant</div>
-    <button class="newchat" id="newchat"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>New chat</button>
-    <div class="sec">History</div>
-    <div id="chatlist"></div>
-    <div class="account"><div class="avatar-u" id="uav"></div><div class="name" id="uname"></div><button class="link" id="logout">Sign out</button></div>
+  <aside id="side" aria-label="Main navigation">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">ཇ</div>
+      <div class="txt"><div class="name">Dzongkha AI</div><div class="tag">Your Intelligent Dzongkha Assistant</div></div>
+    </div>
+    <nav id="nav"></nav>
   </aside>
-  <div id="backdrop"></div>
-
-  <main id="main">
-    <div class="top"><button class="menu" id="menu" aria-label="Open history">Menu</button><h1 id="title">New chat</h1>
-      <div class="zoom" role="group" aria-label="Text size of answers"><button id="zm" type="button" title="Smaller text" aria-label="Smaller text">A&minus;</button><button id="zp" type="button" title="Larger text" aria-label="Larger text">A+</button></div></div>
-    <div id="scroll">
-      <section id="empty">
-        <div class="logo" style="width:48px;height:48px;font-size:1.2rem;border-radius:50%">Dz</div>
-        <h2>Ask anything, or attach a document</h2>
-        <p>Write in Dzongkha or English. Every answer comes back in Dzongkha.</p>
-        <div class="starters">
-          <button class="starter" id="st-file"><b>Attach a document</b><span>PDF, Word or text file. The whole file is read.</span></button>
-          <button class="starter" id="st-q"><b>Ask a question</b><span>In Dzongkha or English.</span></button>
-        </div>
-      </section>
-      <div id="msgs"></div>
-    </div>
-    <div class="composer-wrap">
-      <div class="composer">
-        <div id="docs"></div>
-        <div class="row">
-          <button class="icon" id="attach" title="Attach a PDF, Word or text file" aria-label="Attach a file"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.5l-6.4 6.4a4 4 0 01-5.7-5.7l7-7a2.7 2.7 0 013.8 3.8l-7 7a1.3 1.3 0 01-1.9-1.9l6.3-6.3"/></svg></button>
-          <textarea id="input" rows="1" placeholder="Ask a question" aria-label="Message"></textarea>
-          <select class="sel" id="paras" title="Paragraphs in the summary" aria-label="Paragraphs in the summary" hidden><option value="0">Auto</option><option value="1">1 paragraph</option><option value="2">2 paragraphs</option><option value="3">3 paragraphs</option><option value="4">4 paragraphs</option><option value="5">5 paragraphs</option><option value="6">6 paragraphs</option></select>
-          <button class="sumbtn" id="sum" hidden>Summarize</button>
-          <button class="icon send" id="send" title="Send" aria-label="Send"><svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14V4M4.5 8.5L9 4l4.5 4.5"/></svg></button>
-        </div>
-      </div>
-      <div class="hint">Answers are translated, so check names and numbers. Enter to send, Shift+Enter for a new line.</div>
-    </div>
-    <div id="drop" hidden>Drop a file to attach it</div>
-  </main>
+  <div id="scrim"></div>
+  <div id="main">
+    <header id="top">
+      <button class="icon-btn" id="menu-btn" aria-label="Open menu"></button>
+      <h1 id="page-title">Dashboard</h1>
+      <button class="icon-btn" id="theme-btn" aria-label="Switch between light and dark mode" title="Light or dark mode"></button>
+      <a class="icon-btn" id="set-btn" href="#/settings" aria-label="Settings" title="Settings"></a>
+      <button class="profile" id="profile" title="Sign out"><span class="avatar" id="uav"></span><span class="uname" id="uname"></span></button>
+    </header>
+    <main id="view" tabindex="-1"></main>
+  </div>
 </div>
-<input type="file" id="file" accept=".pdf,.docx,.txt,.md" multiple hidden>
+<div id="toasts" role="status" aria-live="polite"></div>
 
-<script>
-const $ = (s) => document.querySelector(s);
-const TIB = /[ༀ-࿿]/;
-let chats = [], cur = null, chat = null, timer = null, uploading = [], showEn = new Set(), mode = 'in';
-
-function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-
-async function api(path, opt = {}) {
-  const o = { credentials: 'same-origin', headers: {} };
-  if (opt.json !== undefined) { o.method = opt.method || 'POST'; o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opt.json); }
-  else if (opt.body) { o.method = 'POST'; o.body = opt.body; }
-  else if (opt.method) o.method = opt.method;
-  const r = await fetch(path, o);
-  const data = await r.json().catch(() => ({}));
-  if (r.status === 401 && !opt.quiet) { showAuth(); throw new Error('Please sign in.'); }
-  if (!r.ok) throw new Error(data.detail || 'Something went wrong.');
-  return data;
-}
-
-/* ---------- sign in ---------- */
-function showAuth() { $('#app').hidden = true; $('#auth').hidden = false; clearTimeout(timer); $('#u').focus(); }
-function setMode(m) {
-  mode = m;
-  $('#tab-in').setAttribute('aria-selected', m === 'in'); $('#tab-up').setAttribute('aria-selected', m === 'up');
-  $('#authgo').textContent = m === 'in' ? 'Sign in' : 'Create account';
-  $('#p').autocomplete = m === 'in' ? 'current-password' : 'new-password';
-  $('#autherr').textContent = '';
-}
-$('#tab-in').onclick = () => setMode('in'); $('#tab-up').onclick = () => setMode('up');
-$('#authform').onsubmit = async (e) => {
-  e.preventDefault(); $('#authgo').disabled = true; $('#autherr').textContent = '';
-  try {
-    const r = await api(mode === 'in' ? '/api/login' : '/api/register', { json: { username: $('#u').value, password: $('#p').value }, quiet: true });
-    $('#p').value = ''; await enter(r.username);
-  } catch (err) { $('#autherr').textContent = err.message; }
-  $('#authgo').disabled = false;
-};
-$('#logout').onclick = async () => { await api('/api/logout', { method: 'POST', quiet: true }).catch(() => {}); chat = null; cur = null; showAuth(); };
-
-async function enter(username) {
-  $('#auth').hidden = true; $('#app').hidden = false;
-  $('#uname').textContent = username; $('#uav').textContent = username[0];
-  await loadChats();
-  if (chats.length) await openChat(chats[0].id); else resetView();
-}
-
-/* ---------- history ---------- */
-async function loadChats() { chats = await api('/api/chats'); renderChats(); }
-function renderChats() {
-  const box = $('#chatlist'); box.textContent = '';
-  if (!chats.length) { box.append(el('div', 'sec', 'No chats yet')); return; }
-  for (const c of chats) {
-    const row = el('div', 'ci' + (c.id === cur ? ' active' : ''));
-    const open = el('button', 'open', c.title); open.title = c.title; open.onclick = () => { document.body.classList.remove('nav'); openChat(c.id); };
-    const del = el('button', 'del', '✕'); del.title = 'Delete chat'; del.setAttribute('aria-label', 'Delete chat');
-    del.onclick = async () => { if (!confirm('Delete this chat and its files?')) return; await api('/api/chats/' + c.id, { method: 'DELETE' }); if (cur === c.id) { cur = null; chat = null; } await loadChats(); if (cur === null) { chats.length ? openChat(chats[0].id) : resetView(); } };
-    row.append(open, del); box.append(row);
-  }
-}
-function resetView() { cur = null; chat = null; $('#title').textContent = 'New chat'; $('#msgs').textContent = ''; renderDocs(); updateEmpty(); renderChats(); }
-async function newChat() { document.body.classList.remove('nav'); resetView(); $('#input').focus(); }
-$('#newchat').onclick = newChat;
-
-async function openChat(id) { cur = id; $('#msgs').textContent = ''; showEn = new Set(); renderChats(); await loadChat(true); }
-async function loadChat(scroll) {
-  if (cur == null) return;
-  const id = cur, data = await api('/api/chats/' + id);
-  if (id !== cur) return;
-  const wasBottom = nearBottom();
-  chat = data; $('#title').textContent = data.title; renderMessages(); renderDocs();
-  if (scroll || wasBottom) toBottom();
-  const busy = data.messages.some((m) => m.status === 'pending') || data.docs.some((d) => d.status === 'queued' || d.status === 'processing');
-  clearTimeout(timer); if (busy) timer = setTimeout(() => loadChat(false).catch(() => {}), 1500); else loadChats();
-}
-function nearBottom() { const s = $('#scroll'); return s.scrollHeight - s.scrollTop - s.clientHeight < 120; }
-function toBottom() { const s = $('#scroll'); s.scrollTop = s.scrollHeight; }
-
-/* ---------- messages ---------- */
-function fill(node, m) {
-  node.className = 'msg ' + m.role + (m.status === 'error' ? ' error' : ''); node.textContent = '';
-  if (m.role === 'assistant') node.append(el('div', 'avatar', 'Dz'));
-  const body = el('div', 'body');
-  if (m.status === 'pending') {
-    const p = el('div', 'pending'); const d = el('span', 'dots'); d.append(el('i'), el('i'), el('i'));
-    p.append(d, el('span', null, (m.progress || 'Thinking') + '...')); body.append(p);
-  } else {
-    const useEn = showEn.has(m.id) && m.en; const txt = useEn ? m.en : m.text;
-    body.append(el('div', 'text' + (!useEn && TIB.test(txt) ? ' dz' : ''), txt));
-    if (m.role === 'user' && m.en && m.en !== m.text) body.append(el('div', 'note', 'Understood as: ' + m.en));
-    if (m.role === 'assistant' && m.status === 'done') {
-      const a = el('div', 'acts');
-      if (m.en) { const b = el('button', null, useEn ? 'Show Dzongkha' : 'Show English'); b.onclick = () => { useEn ? showEn.delete(m.id) : showEn.add(m.id); renderMessages(); }; a.append(b); }
-      const c = el('button', null, 'Copy'); c.onclick = async () => { try { await navigator.clipboard.writeText(txt); c.textContent = 'Copied'; setTimeout(() => (c.textContent = 'Copy'), 1200); } catch { c.textContent = 'Select and copy'; } }; a.append(c);
-      body.append(a);
-    }
-  }
-  node.append(body);
-}
-function renderMessages() {
-  const box = $('#msgs'), list = chat ? chat.messages : [];
-  const ids = new Set(list.map((m) => String(m.id)));
-  [...box.children].forEach((n) => { if (!ids.has(n.dataset.id)) n.remove(); });
-  for (const m of list) {
-    let n = box.querySelector('[data-id="' + m.id + '"]');
-    if (!n) { n = el('div'); n.dataset.id = m.id; box.append(n); }
-    const sig = [m.status, m.progress, m.text, m.en, showEn.has(m.id)].join('␟');
-    if (n.dataset.sig !== sig) { n.dataset.sig = sig; fill(n, m); }
-  }
-  updateEmpty();
-}
-function updateEmpty() { $('#empty').hidden = !!(chat && chat.messages.length); }
-
-/* ---------- documents ---------- */
-function renderDocs() {
-  const box = $('#docs'); box.textContent = '';
-  const docs = chat ? chat.docs : [];
-  const lastReady = docs.map((d) => d.status).lastIndexOf('ready');
-  docs.forEach((d, i) => {
-    const c = el('div', 'chip'); c.append(el('span', 'fn', d.name));
-    let meta = '', cls = 'meta';
-    if (d.status === 'error') { meta = d.error; cls += ' bad'; }
-    else if (d.status !== 'ready') meta = d.progress || 'Reading...';
-    else {
-      meta = (d.pages > 1 ? d.pages + ' pages, ' : '') + d.words.toLocaleString() + ' words';
-      if (i !== lastReady) { meta += '. Older file, not used'; c.style.opacity = '.6'; }
-      if (d.empty_pages) { meta += '. ' + d.empty_pages + ' page' + (d.empty_pages > 1 ? 's have' : ' has') + ' no text (scanned images?)'; cls += ' warn'; }
-    }
-    c.append(el('span', cls, meta));
-    const x = el('button', null, '✕'); x.title = 'Remove file'; x.setAttribute('aria-label', 'Remove file');
-    x.onclick = async () => { await api('/api/docs/' + d.id, { method: 'DELETE' }); loadChat(false); };
-    c.append(x); box.append(c);
-  });
-  for (const n of uploading) { const c = el('div', 'chip'); c.append(el('span', 'fn', n), el('span', 'meta', 'Uploading...')); box.append(c); }
-  $('#sum').hidden = $('#paras').hidden = !docs.some((d) => d.status === 'ready');
-}
-async function ensureChat() {
-  if (cur != null) return;
-  const c = await api('/api/chats', { method: 'POST', json: {} }); cur = c.id; chat = { id: c.id, title: c.title, messages: [], docs: [] };
-  await loadChats();
-}
-async function uploadFiles(files) {
-  for (const f of files) {
-    try {
-      await ensureChat(); uploading.push(f.name); renderDocs();
-      const fd = new FormData(); fd.append('file', f);
-      await api('/api/chats/' + cur + '/upload', { body: fd });
-    } catch (e) { alert(f.name + ': ' + e.message); }
-    uploading = uploading.filter((n) => n !== f.name);
-  }
-  await loadChat(false);
-}
-$('#attach').onclick = $('#st-file').onclick = () => $('#file').click();
-$('#file').onchange = (e) => { uploadFiles([...e.target.files]); e.target.value = ''; };
-let dragDepth = 0;
-addEventListener('dragenter', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files') && !$('#app').hidden) { dragDepth++; $('#drop').hidden = false; } });
-addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $('#drop').hidden = true; });
-addEventListener('dragover', (e) => e.preventDefault());
-addEventListener('drop', (e) => { e.preventDefault(); dragDepth = 0; $('#drop').hidden = true; if (e.dataTransfer.files.length && !$('#app').hidden) uploadFiles([...e.dataTransfer.files]); });
-
-/* ---------- sending ---------- */
-async function send(action) {
-  const box = $('#input'), text = box.value.trim();
-  if (action === 'chat' && !text) return;
-  $('#send').disabled = true;
-  try {
-    await ensureChat();
-    box.value = ''; grow();
-    await api('/api/chats/' + cur + '/messages', { json: { text, action, paragraphs: action === 'summarize' ? Number($('#paras').value) || 0 : 0 } });
-    await loadChat(true);
-  } catch (e) { alert(e.message); }
-  $('#send').disabled = false; box.focus();
-}
-$('#send').onclick = () => send('chat');
-$('#sum').onclick = () => send('summarize');
-$('#st-q').onclick = () => $('#input').focus();
-$('#input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send('chat'); } });
-function grow() { const t = $('#input'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 180) + 'px'; }
-$('#input').addEventListener('input', grow);
-
-$('#menu').onclick = () => document.body.classList.add('nav');
-$('#backdrop').onclick = () => document.body.classList.remove('nav');
-
-/* ---------- text size of answers (A- / A+), remembered in this browser ---------- */
-let zoom = 1.15;
-function setZoom(z) {
-  zoom = Math.min(1.8, Math.max(0.9, Math.round(z * 100) / 100));
-  document.documentElement.style.setProperty('--zoom', zoom);
-  try { localStorage.setItem('dzZoom', String(zoom)); } catch {}
-}
-try { const z = parseFloat(localStorage.getItem('dzZoom')); if (z >= 0.9 && z <= 1.8) zoom = z; } catch {}
-setZoom(zoom);
-$('#zm').onclick = () => setZoom(zoom - 0.1); $('#zp').onclick = () => setZoom(zoom + 0.1);
-
-(async () => {
-  try { const m = await api('/api/me', { quiet: true }); await enter(m.username); } catch { showAuth(); }
-})();
-</script>
+<script src="/static/js/core.js"></script>
+<script src="/static/js/dashboard.js"></script>
+<script src="/static/js/chat.js"></script>
+<script src="/static/js/summarizer.js"></script>
+<script src="/static/js/library.js"></script>
+<script src="/static/js/settings.js"></script>
+<script src="/static/js/main.js"></script>
 </body>
 </html>
