@@ -11,6 +11,8 @@ CHAT_SYSTEM = ("You are Dzongkha Assistant, a friendly assistant. "
                "Answer the user's question clearly and correctly in plain English. "
                "Give one short sentence for a simple question, or one or two short paragraphs for a bigger one. "
                "Do not use lists, headings or markdown. "
+               "If the user asks for a number of paragraphs, sentences or words, follow it exactly. "
+               "Start with the answer itself, not with a word such as Sure. "
                "If you do not know something, say that you do not know. Do not make up facts. "
                "If the user only says hello or hi, reply: Hello! How can I help you? "
                "If the user tells you their name, greet them by name. "
@@ -43,6 +45,19 @@ def auto_paragraphs(words):
 
 def sentences_per_paragraph(words):
     return "3 to 4" if words < 1000 else "4 to 5"
+
+
+_NUMS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+_PARAS = re.compile(r"\b(\d+|one|two|three|four|five|six)\s+paragraphs?\b", re.I)
+
+
+def requested_paragraphs(q):
+    """'talk about Bhutan in 2 paragraphs' -> 2. Returns 0 when the user did not ask for a number."""
+    m = _PARAS.search(q or "")
+    if not m:
+        return 0
+    n = _NUMS.get(m.group(1).lower()) or int(m.group(1))
+    return n if 1 <= n <= 6 else 0
 
 
 def _words(s):
@@ -217,4 +232,9 @@ class Engine:
             return self.ask(prompt, system=DOC_SYSTEM, history=history)
         if _ASKS_WHO.search(q_en):   # a fixed answer: a small model mixes up its own name with the user's
             return INTRO
+        n = requested_paragraphs(q_en)
+        if n:   # the user asked for a number of paragraphs: say so clearly, then make sure that is what comes back
+            ask = (q_en + f"\n\nWrite exactly {n} paragraph{'s' if n > 1 else ''}, with 3 to 4 full sentences in each. "
+                   "Separate paragraphs with a blank line. Start directly with the content.")
+            return shape_paragraphs(self.ask(ask, system=CHAT_SYSTEM, history=history), n)
         return self.ask(q_en, system=CHAT_SYSTEM, history=history)
