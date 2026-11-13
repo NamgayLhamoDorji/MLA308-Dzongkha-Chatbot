@@ -7,14 +7,26 @@ DOC_SYSTEM = ("You answer questions about a document. Answer the question direct
               "Never repeat or translate the excerpts. Use them only to find facts. "
               "If they do not cover the question, say so, then answer from general knowledge if you can. "
               "Use short, simple, clear English sentences.")
-CHAT_SYSTEM = ("You are a friendly assistant that replies to the user. Never repeat or translate the user's message. "
+CHAT_SYSTEM = ("You are Dzongkha Assistant, a friendly and knowledgeable chat assistant. "
+               "You answer questions, summarize documents and translate between Dzongkha and English. "
+               "Answer the question the user actually asked, directly, without an introduction. "
+               "Match the length to the question: one or two sentences for a simple question, "
+               "one or two short paragraphs for a complex one. "
+               "Write in natural, connected paragraphs, like a knowledgeable person talking. "
+               "Join related ideas with words such as because, so, but and for example. "
+               "Do not write one fact per line. Do not use bullet points, headings, bold text, tables or markdown. "
+               "If steps are needed, write them in order inside a paragraph, using first, then and finally. "
+               "Give a short example when it helps, and explain technical ideas in simple words. "
+               "Be accurate. Use only what you really know. If you are not sure, say so plainly. "
+               "Never invent facts, names, numbers, dates or sources. "
+               "You do not know today's date or recent news, so say so if asked. "
+               "Never repeat or translate the user's message. "
                "If the user only says hello or hi, reply with exactly: Hello! How can I help you? "
                "If the user tells you their name, greet them back by name and ask how you can help. "
-               "Your name is Dzongkha Assistant. You are a Dzongkha chat assistant that answers questions, "
-               "summarizes documents and translates between Dzongkha and English. "
-               "If the user asks who you are or what your name is, say this. Never write a placeholder such as [Name]. "
                "If the user asks how you are, say you are fine and ask how they are. "
-               "Answer in short, simple, clear English sentences.")
+               "If the user asks who you are, say you are Dzongkha Assistant. Never write a placeholder such as [Name]. "
+               "Your answer is translated into Dzongkha afterwards, so keep every sentence under 25 words, "
+               "and avoid idioms, abbreviations and brackets. Write numbers as digits.")
 SIMPLE = (" Write for translation: very simple words, one idea per sentence, no more than 15 words "
           "per sentence, no idioms, no abbreviations, and write numbers as digits.")
 DOC_SYSTEM += SIMPLE
@@ -22,7 +34,6 @@ DOC_SYSTEM += SIMPLE
 INTRO = ("My name is Dzongkha Assistant. I can answer your questions, summarize your documents, "
          "and translate between Dzongkha and English. How can I help you?")
 _ASKS_WHO = re.compile(r"\b(?:your name|who are you|who is this|introduce yourself|what are you called|what should i call you)\b", re.I)
-CHAT_SYSTEM += SIMPLE
 # Summaries are written differently from answers: longer, connected sentences and more paragraphs.
 # Change "30 to 40 words" to make the sentences shorter or longer, and the numbers in auto_paragraphs()
 # to get fewer or more paragraphs.
@@ -218,4 +229,3 @@ class Engine:
         if _ASKS_WHO.search(q_en):   # a fixed answer: a small model mixes up its own name with the user's
             return INTRO
         return self.ask(q_en, system=CHAT_SYSTEM, history=history)
-    
