@@ -395,6 +395,33 @@ def get_doc(doc_id: int, user=Depends(current_user)):
             "text": d["raw_text"][:cap], "truncated": len(d["raw_text"]) > cap, "summaries": [dict(s) for s in sums]}
 
 
+class TranslateIn(BaseModel):
+    text: str
+    target: str = "auto"   # auto | dz | en
+
+
+@app.post("/api/translate")
+def translate_text(body: TranslateIn, user=Depends(current_user)):
+    text = (body.text or "").strip()
+    if not text:
+        raise HTTPException(400, "Type or paste some text first.")
+    if len(text) > 3000:
+        raise HTTPException(400, "Please keep the text under 3000 characters.")
+    src_dz = is_dzongkha(text)
+    target = body.target if body.target in ("dz", "en") else ("en" if src_dz else "dz")
+    if (target == "en") != src_dz:
+        # text is already in the requested language
+        return {"text": text, "direction": "same", "target": target}
+    try:
+        if target == "en":
+            out = ENGINE.tr.translate(text, "dz", "en")
+        else:
+            out = "\n".join(ENGINE.to_dz(l) if l.strip() else "" for l in text.split("\n"))
+    except Exception as e:
+        raise HTTPException(502, "Translation is not available right now. Please try again.")
+    return {"text": out.strip(), "direction": "dz-en" if target == "en" else "en-dz", "target": target}
+
+
 class SaveIn(BaseModel):
     message_id: int
 

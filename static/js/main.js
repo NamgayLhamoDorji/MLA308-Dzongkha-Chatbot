@@ -1,14 +1,14 @@
 /* Start-up: sign in, build the sidebar, wire the top bar, start the router. */
 (() => {
   const { $, el, icon, api, go, pref, setPref } = DZ;
-  const NAV = [['dashboard', 'Dashboard', 'home'], ['chat', 'Chat with AI', 'chat'], ['summarizer', 'Document Summarizer', 'doc'],
+  const NAV = [['dashboard', 'Dashboard', 'home'], ['chat', 'Chat with AI', 'chat'], ['summarizer', 'Document Summarizer', 'doc'], ['translate', 'Translate', 'translate'],
                ['documents', 'My Documents', 'folder'], ['summaries', 'Saved Summaries', 'bookmark'], ['history', 'Chat History', 'clock'],
                ['settings', 'Settings', 'gear'], ['help', 'Help', 'help']];
 
   function buildNav() {
     const nav = $('#nav'); nav.textContent = '';
     NAV.forEach(([page, label, ic], i) => {
-      if (i === 6) nav.append(el('div', 'nav-sep'));
+      if (i === 7) nav.append(el('div', 'nav-sep'));
       const a = el('a', 'nav-item'); a.href = '#/' + page; a.dataset.page = page; a.title = label; a.append(icon(ic), el('span', 'lbl', label)); nav.append(a);
     });
     const spacer = el('div'); spacer.style.flex = '1'; nav.append(spacer);
